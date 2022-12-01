@@ -1,7 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const ctrlContact = require("../../controller/contacts.js");
+const auth = require("../../service/middlewares/authMiddleware");
 require("dotenv").config();
+
+router.use(auth);
 
 router.get("/", ctrlContact.get);
 
