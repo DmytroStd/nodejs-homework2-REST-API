@@ -6,10 +6,29 @@ const {
 
 const get = async (req, res, next) => {
   try {
-    const contacts = await service.getAllContacts();
+    let contacts;
+    if (req.query.page)
+      contacts = await service.getByPage(
+        req.query.page,
+        +req.query.perPage,
+        req.user.id
+      );
+    else if (req.query.favorite)
+      contacts = await service.getFavorite(
+        req.user.id,
+        req.query.favorite,
+        req.query.perPage
+      );
+    else contacts = await service.getAllContacts(req.user.id);
+    // const contacts = !req.query.page
+    //   ? await service.getAllContacts()
+    //   : await service.getByPage(req.query.page, +req.query.perPage);
+
+    // const contacts = await service.getAllContacts();
     res.json({
       status: "success",
       code: 200,
+      totalContacts: await service.getTotalContacts(req.user.id),
       data: { contacts },
     });
   } catch (err) {
@@ -50,7 +69,14 @@ const addContact = async (req, res, next) => {
         message: "missing required name field",
       });
     }
-    const contact = await service.createContact(req.body);
+    const { name, email, phone, favorite } = req.body;
+    const contact = await service.createContact({
+      name,
+      email,
+      phone,
+      favorite,
+      owner: req.user.id,
+    });
 
     res.json({
       status: "success",
@@ -93,7 +119,7 @@ const update = async (req, res, next) => {
 
 const updateStatus = async (req, res, next) => {
   const { id } = req.params;
-  const { isDone = false } = req.body;
+  const { favorite = false } = req.body;
 
   try {
     const validationResult = updateFavoriteSchema.validate(req.body);
@@ -104,7 +130,7 @@ const updateStatus = async (req, res, next) => {
         message: "missing field favorite",
       });
     }
-    const contacts = await service.updateStatusContact(id, { isDone });
+    const contacts = await service.updateStatusContact(id, { favorite });
     if (!contacts) {
       res.json({
         status: "success",
