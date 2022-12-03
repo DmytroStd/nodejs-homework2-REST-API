@@ -20,11 +20,7 @@ const get = async (req, res, next) => {
         req.query.perPage
       );
     else contacts = await service.getAllContacts(req.user.id);
-    // const contacts = !req.query.page
-    //   ? await service.getAllContacts()
-    //   : await service.getByPage(req.query.page, +req.query.perPage);
 
-    // const contacts = await service.getAllContacts();
     res.json({
       status: "success",
       code: 200,

@@ -36,8 +36,11 @@ const updateStatusContact = (id, body) => {
 };
 
 const updateUserSubscription = (id, subscription) => {
-  console.log(subscription);
   return User.findByIdAndUpdate({ _id: id }, subscription);
+};
+
+const updateUserAvatar = (id, avatarURL) => {
+  return User.findByIdAndUpdate({ _id: id }, avatarURL);
 };
 
 const removeContact = (id) => {
@@ -54,5 +57,6 @@ module.exports = {
   updateContact,
   updateStatusContact,
   updateUserSubscription,
+  updateUserAvatar,
   removeContact,
 };

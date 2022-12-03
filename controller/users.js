@@ -1,9 +1,12 @@
+const path = require("path");
+const fs = require("fs").promises;
 const jwt = require("jsonwebtoken");
-const { User } = require("../service/schemas/users");
+const { User, userSchema } = require("../service/schemas/users");
 require("dotenv").config();
 const secret = process.env.SECRET;
-const userSchema = require("../service/schemas/users");
 const service = require("../service/index");
+const gravatar = require("gravatar");
+const Jimp = require("jimp");
 
 const registration = async (req, res, next) => {
   const validationResult = userSchema.validate(req.body);
@@ -24,8 +27,9 @@ const registration = async (req, res, next) => {
       data: "Conflict",
     });
   }
+  const avatarURL = gravatar.url(email);
   try {
-    const newUser = new User({ email, password });
+    const newUser = new User({ email, password, avatarURL });
     newUser.setPassword(password);
     await newUser.save();
     res.status(201).json({
@@ -35,6 +39,7 @@ const registration = async (req, res, next) => {
         user: {
           email,
           subscription: newUser.subscription,
+          avatarURL,
         },
       },
     });
@@ -67,6 +72,7 @@ const login = async (req, res, next) => {
   const payload = {
     id: user.id,
     email: user.email,
+    // avatarURL: user.avatarURL,
   };
 
   const token = jwt.sign(payload, secret, { expiresIn: "1h" });
@@ -79,6 +85,7 @@ const login = async (req, res, next) => {
       user: {
         email,
         subscription: user.subscription,
+        avatarURL: user.avatarURL,
       },
     },
   });
@@ -139,10 +146,72 @@ const updateSubscription = async (req, res, next) => {
   }
 };
 
+const updateAvatar = async (req, res, next) => {
+  const { _id } = req.user;
+  const { originalname } = req.file;
+  const tempUpload = req.file.path;
+  const filename = `${_id}_${originalname}`;
+  const newPathFile = path.join(__dirname, "../", "public", "avatars");
+  const resultUpload = path.join(newPathFile, filename);
+
+  try {
+    await fs.rename(tempUpload, resultUpload);
+    const resizeFile = await Jimp.read(resultUpload);
+    await resizeFile.resize(250, 250).writeAsync(resultUpload);
+    const avatarURL = path.join("avatar", filename);
+    const user = await service.updateUserAvatar(_id, {
+      avatarURL,
+    });
+
+    return res.json({
+      status: "success",
+      code: 200,
+      data: { avatarURL: user.avatarURL },
+    });
+  } catch (err) {
+    await fs.unlink(tempUpload);
+    return next(err);
+  }
+};
+
 module.exports = {
   registration,
   login,
   logout,
   current,
   updateSubscription,
+  updateAvatar,
 };
+
+// const updateAvatar = async (req, res, next) => {
+//   const { description } = req.body;
+//   const { path: temporaryName, originalname } = req.file;
+
+//   const newPathFile = path.join(process.cwd(), "images");
+//   const fileName = path.join(newPathFile, originalname);
+
+//   try {
+//     await fs.rename(temporaryName, fileName);
+//   } catch (err) {
+//     await fs.unlink(temporaryName);
+//     return next(err);
+//   }
+//   res.json({ description, message: "Файл успешно загружен", status: 200 });
+// };
+
+// const updateAvatar = async (req, res) => {
+//   const { _id } = req.user;
+//   const { path: tempUpload, originalname } = req.file;
+
+//   const filename = `${_id}_${originalname}`;
+//   const avatarsDir = path.join(__dirname, "../../", "public", "avatars");
+//   const resultUpload = path.join(avatarsDir, filename);
+
+//   await fs.rename(tempUpload, resultUpload);
+//   const resizeFile = await Jimp.read(resultUpload);
+//   resizeFile.resize(250, 250).write(resultUpload);
+//   const avatarURL = path.join("avatars", filename);
+//   await User.findByIdAndUpdate(req.user._id, { avatarURL });
+
+//   res.json({ avatarURL });
+// };
