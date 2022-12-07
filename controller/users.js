@@ -7,6 +7,8 @@ const secret = process.env.SECRET;
 const service = require("../service/index");
 const gravatar = require("gravatar");
 const Jimp = require("jimp");
+const { v4: uuidv4 } = require("uuid");
+const sendVerificationMail = require("../service/helpers/sendVerificationMail");
 
 const registration = async (req, res, next) => {
   const validationResult = userSchema.validate(req.body);
@@ -28,10 +30,12 @@ const registration = async (req, res, next) => {
     });
   }
   const avatarURL = gravatar.url(email);
+  const verificationToken = uuidv4();
   try {
     const newUser = new User({ email, password, avatarURL });
     newUser.setPassword(password);
     await newUser.save();
+    sendVerificationMail(email, verificationToken);
     res.status(201).json({
       status: "success",
       code: 201,
@@ -40,6 +44,7 @@ const registration = async (req, res, next) => {
           email,
           subscription: newUser.subscription,
           avatarURL,
+          verificationToken,
         },
       },
     });
@@ -72,7 +77,6 @@ const login = async (req, res, next) => {
   const payload = {
     id: user.id,
     email: user.email,
-    // avatarURL: user.avatarURL,
   };
 
   const token = jwt.sign(payload, secret, { expiresIn: "1h" });
@@ -174,6 +178,39 @@ const updateAvatar = async (req, res, next) => {
   }
 };
 
+const verifyUser = async (req, res, next) => {
+  const verificationToken = req.params.verificationToken;
+  const user = await User.findOne({ verificationToken });
+
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+  await User.findByIdAndUpdate(
+    { _id: user._id },
+    { $set: { verificationToken: null, verify: true } }
+  );
+  return res.status(200).json({ message: "Verification successful" });
+};
+
+const verificationRetry = async (req, res, next) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ message: "Missing required field email" });
+  }
+  const user = await User.findOne({ email });
+  if (!user) {
+    return res.status(401).json({ message: "Email or password is wrong" });
+  }
+  const { verify } = user;
+  if (verify) {
+    return res
+      .status(401)
+      .json({ message: "Verification has already been passed" });
+  }
+  sendVerificationMail(email, user.verificationToken);
+  return res.status(200).json({ message: "Verification email sent" });
+};
+
 module.exports = {
   registration,
   login,
@@ -181,37 +218,6 @@ module.exports = {
   current,
   updateSubscription,
   updateAvatar,
+  verifyUser,
+  verificationRetry,
 };
-
-// const updateAvatar = async (req, res, next) => {
-//   const { description } = req.body;
-//   const { path: temporaryName, originalname } = req.file;
-
-//   const newPathFile = path.join(process.cwd(), "images");
-//   const fileName = path.join(newPathFile, originalname);
-
-//   try {
-//     await fs.rename(temporaryName, fileName);
-//   } catch (err) {
-//     await fs.unlink(temporaryName);
-//     return next(err);
-//   }
-//   res.json({ description, message: "Файл успешно загружен", status: 200 });
-// };
-
-// const updateAvatar = async (req, res) => {
-//   const { _id } = req.user;
-//   const { path: tempUpload, originalname } = req.file;
-
-//   const filename = `${_id}_${originalname}`;
-//   const avatarsDir = path.join(__dirname, "../../", "public", "avatars");
-//   const resultUpload = path.join(avatarsDir, filename);
-
-//   await fs.rename(tempUpload, resultUpload);
-//   const resizeFile = await Jimp.read(resultUpload);
-//   resizeFile.resize(250, 250).write(resultUpload);
-//   const avatarURL = path.join("avatars", filename);
-//   await User.findByIdAndUpdate(req.user._id, { avatarURL });
-
-//   res.json({ avatarURL });
-// };
